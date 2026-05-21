@@ -4,7 +4,7 @@
  */
 
 function b64urlDecode(input: string): Uint8Array {
-	const padded = input.replace(/-/g, "+").replace(/_/g, "/") + "==".slice((input.length + 3) % 4);
+	const padded = input.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((input.length + 3) % 4);
 	const bin = atob(padded);
 	const out = new Uint8Array(bin.length);
 	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

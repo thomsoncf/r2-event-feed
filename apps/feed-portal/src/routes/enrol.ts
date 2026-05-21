@@ -7,9 +7,11 @@ const router = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 router.post("/api/enrol", async (c) => {
 	const user = getUser(c);
-	if (user.role !== "subscriber_user") {
-		return c.json({ error: "operators cannot self-enrol as subscribers" }, 400);
-	}
+	// Anyone authenticated who isn't already linked to a subscriber may enrol.
+	// Operators (operator_admin) can also enrol; the two roles are independent
+	// — having a subscriber_id grants subscriber capabilities, and the role
+	// column grants admin capabilities. This is required for the demo to be
+	// usable with an Access policy that only allows operator domains.
 	if (user.subscriber_id) {
 		return c.json({ error: "already_enrolled", subscriber_id: user.subscriber_id }, 409);
 	}

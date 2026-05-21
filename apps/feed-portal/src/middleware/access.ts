@@ -15,7 +15,10 @@ import type { AccessUser, DbUser, Env, Variables } from "../types";
  */
 
 function b64urlDecode(input: string): string {
-	const padded = input.replace(/-/g, "+").replace(/_/g, "/") + "==".slice((input.length + 3) % 4);
+	// Pad to a multiple of 4. "===".slice((L+3)%4) yields the right pad for
+	// every L%4: 0→"", 2→"==", 3→"=". Don't shorten the source string — using
+	// "==" here is wrong and will throw atob errors for most JWT payloads.
+	const padded = input.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((input.length + 3) % 4);
 	return atob(padded);
 }
 
@@ -89,7 +92,10 @@ export function requireSubscriber(): MiddlewareHandler<{
 }> {
 	return async (c, next) => {
 		const u = c.get("user");
-		if (u.role !== "subscriber_user" || !u.subscriber_id) {
+		// We only check that the user has been linked to a subscriber.
+		// Operators are also allowed to act as subscribers if they've enrolled
+		// — see /api/enrol for the rationale.
+		if (!u.subscriber_id) {
 			return c.json({ error: "not_enrolled" }, 403);
 		}
 		await next();

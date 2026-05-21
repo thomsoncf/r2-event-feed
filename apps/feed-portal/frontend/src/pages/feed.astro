@@ -1,0 +1,46 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Live Feed">
+	<div class="card">
+		<h2>Live event stream</h2>
+		<p>Paste a Stream Key (JWT) and the fanout worker URL to subscribe via SSE.</p>
+		<label>Fanout worker base URL</label>
+		<input id="fanout" placeholder="https://r2-event-feed-fanout.your-subdomain.workers.dev" />
+		<label>Stream Key</label>
+		<input id="key" placeholder="eyJ…" />
+		<p>
+			<button id="connect">Connect</button>
+			<button id="disconnect" class="secondary">Disconnect</button>
+		</p>
+		<div class="muted" id="status">Disconnected.</div>
+		<pre id="log" style="margin-top: 12px; max-height: 400px; overflow-y: auto"></pre>
+	</div>
+
+	<script>
+		let es: EventSource | null = null;
+
+		document.getElementById("connect")!.onclick = () => {
+			const base = (document.getElementById("fanout") as HTMLInputElement).value.trim();
+			const key = (document.getElementById("key") as HTMLInputElement).value.trim();
+			if (!base || !key) return alert("Both fields required.");
+			es?.close();
+			const url = `${base.replace(/\/$/, "")}/stream?key=${encodeURIComponent(key)}`;
+			es = new EventSource(url);
+			document.getElementById("status")!.textContent = `Connecting to ${url}…`;
+			es.onopen = () => (document.getElementById("status")!.textContent = "Connected.");
+			es.onerror = () => (document.getElementById("status")!.textContent = "Error / disconnected.");
+			es.onmessage = (ev) => {
+				const log = document.getElementById("log")!;
+				const time = new Date().toISOString();
+				log.textContent = `[${time}] ${ev.data}\n${log.textContent}`;
+			};
+		};
+
+		document.getElementById("disconnect")!.onclick = () => {
+			es?.close();
+			es = null;
+			document.getElementById("status")!.textContent = "Disconnected.";
+		};
+	</script>
+</Base>

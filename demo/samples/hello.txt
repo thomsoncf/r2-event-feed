@@ -1,0 +1,3 @@
+Hello from r2-event-feed. This is a sample object — its upload triggers an event notification
+that lands on the event queue, gets consumed by the fanout worker, and is delivered to every
+active subscriber via their chosen channel.

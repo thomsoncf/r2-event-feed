@@ -1,0 +1,18 @@
+# Copy to .dev.vars and fill in.
+# .dev.vars is gitignored.
+
+# Cloudflare API token used by the portal to mint R2 tokens
+# and create per-subscriber pull queues on demand.
+# Required scopes: Account:R2:Edit, Account:Queues:Edit
+CF_API_TOKEN=
+
+# Cloudflare account id this worker manages resources in.
+CF_ACCOUNT_ID=
+
+# HS256 secret used to sign Stream Keys (long-lived JWTs).
+# Generate with: openssl rand -base64 48
+STREAM_JWT_SECRET=
+
+# HMAC secret the fanout worker uses to sign webhook deliveries.
+# Generate with: openssl rand -base64 48
+WEBHOOK_SIGNING_SECRET=

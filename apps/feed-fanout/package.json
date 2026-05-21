@@ -1,0 +1,17 @@
+{
+	"name": "@r2-event-feed/feed-fanout",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"build": "tsc --noEmit",
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"test": "vitest run",
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"hono": "^4.10.3"
+	}
+}

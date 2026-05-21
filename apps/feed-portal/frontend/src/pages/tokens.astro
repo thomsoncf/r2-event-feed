@@ -1,0 +1,114 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Tokens & Subscriptions">
+	<div class="card">
+		<h2>R2 read tokens</h2>
+		<label for="r2-label">Label</label>
+		<input id="r2-label" placeholder="prod read-only" />
+		<p><button id="mint-r2">Mint R2 token</button></p>
+		<div id="r2-result"></div>
+		<table id="r2-table" style="margin-top: 12px"><thead><tr><th>ID</th><th>Label</th><th>Created</th><th></th></tr></thead><tbody></tbody></table>
+	</div>
+
+	<div class="card">
+		<h2>Webhook subscription</h2>
+		<label for="webhook-url">HTTPS URL</label>
+		<input id="webhook-url" placeholder="https://example.com/r2-events" />
+		<p><button id="create-webhook">Create webhook subscription</button></p>
+		<div id="webhook-result"></div>
+	</div>
+
+	<div class="card">
+		<h2>Pull-queue subscription</h2>
+		<p>Provisions a Cloudflare Queue dedicated to your account. Pull messages with the Queues HTTP Pull API.</p>
+		<p><button id="create-pq">Create pull queue</button></p>
+		<div id="pq-result"></div>
+	</div>
+
+	<div class="card">
+		<h2>SSE / WebSocket subscription</h2>
+		<p>Returns a long-lived JWT. Connect to <code>/stream?key=&lt;jwt&gt;</code> on the fanout worker.</p>
+		<p><button id="create-stream">Create stream key</button></p>
+		<div id="stream-result"></div>
+	</div>
+
+	<div class="card">
+		<h2>Active subscriptions</h2>
+		<table id="subs-table"><thead><tr><th>ID</th><th>Channel</th><th>Target</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+	</div>
+
+	<script>
+		function show(elId: string, value: unknown) {
+			document.getElementById(elId)!.innerHTML = `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+		}
+
+		async function refresh() {
+			const tokens = await fetch("/api/r2-tokens").then((r) => r.json()).catch(() => ({ tokens: [] }));
+			const tbody = document.querySelector("#r2-table tbody")!;
+			tbody.innerHTML = (tokens.tokens ?? [])
+				.map(
+					(t: any) =>
+						`<tr><td><code>${t.id.slice(0, 12)}…</code></td><td>${t.label ?? ""}</td><td class="muted">${new Date(t.created_at * 1000).toISOString()}</td><td><button class="secondary revoke-r2" data-id="${t.id}">Revoke</button></td></tr>`,
+				)
+				.join("");
+			tbody.querySelectorAll<HTMLButtonElement>(".revoke-r2").forEach((b) => {
+				b.onclick = async () => {
+					await fetch(`/api/r2-tokens/${b.dataset.id}`, { method: "DELETE" });
+					refresh();
+				};
+			});
+
+			const subs = await fetch("/api/subscriptions").then((r) => r.json()).catch(() => ({ subscriptions: [] }));
+			const sbody = document.querySelector("#subs-table tbody")!;
+			sbody.innerHTML = (subs.subscriptions ?? [])
+				.map(
+					(s: any) =>
+						`<tr><td>${s.id}</td><td>${s.channel}</td><td><code>${s.target}</code></td><td><span class="tag ${s.status === "active" ? "ok" : "bad"}">${s.status}</span></td><td><button class="secondary revoke-sub" data-id="${s.id}" data-ch="${s.channel === "sse" ? "stream" : s.channel.replace("_", "-")}">Revoke</button></td></tr>`,
+				)
+				.join("");
+			sbody.querySelectorAll<HTMLButtonElement>(".revoke-sub").forEach((b) => {
+				b.onclick = async () => {
+					await fetch(`/api/subscriptions/${b.dataset.ch}/${b.dataset.id}`, { method: "DELETE" });
+					refresh();
+				};
+			});
+		}
+
+		document.getElementById("mint-r2")!.onclick = async () => {
+			const label = (document.getElementById("r2-label") as HTMLInputElement).value;
+			const res = await fetch("/api/r2-tokens", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ label }),
+			}).then((r) => r.json());
+			show("r2-result", res);
+			refresh();
+		};
+
+		document.getElementById("create-webhook")!.onclick = async () => {
+			const url = (document.getElementById("webhook-url") as HTMLInputElement).value;
+			const res = await fetch("/api/subscriptions/webhook", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ url }),
+			}).then((r) => r.json());
+			show("webhook-result", res);
+			refresh();
+		};
+
+		document.getElementById("create-pq")!.onclick = async () => {
+			const res = await fetch("/api/subscriptions/pull-queue", { method: "POST" }).then((r) => r.json());
+			show("pq-result", res);
+			refresh();
+		};
+
+		document.getElementById("create-stream")!.onclick = async () => {
+			const res = await fetch("/api/subscriptions/stream", { method: "POST" }).then((r) => r.json());
+			show("stream-result", res);
+			refresh();
+		};
+
+		refresh();
+	</script>
+</Base>

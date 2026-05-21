@@ -1,0 +1,68 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Home">
+	<div class="card">
+		<h2>Welcome</h2>
+		<p>
+			This is the <strong>r2-event-feed</strong> self-service portal. Use it to enrol as a
+			subscriber, mint R2 read tokens, and create webhook / pull-queue / SSE subscriptions
+			against the operator's R2 bucket.
+		</p>
+		<p class="muted">
+			You should be signed in via Cloudflare Access. If you're an operator, you'll see the
+			admin tools. If you're a new subscriber, click <strong>Enrol</strong> below.
+		</p>
+	</div>
+
+	<div class="card" id="me-card">
+		<h2>Your account</h2>
+		<div id="me-detail">Loading…</div>
+	</div>
+
+	<div class="card" id="enrol-card" hidden>
+		<h2>Enrol as a subscriber</h2>
+		<label for="name">Organisation name</label>
+		<input id="name" placeholder="Acme Corp" />
+		<p>
+			<button id="enrol-btn">Submit for approval</button>
+		</p>
+		<p class="muted">An operator will review your request. Until then, you can't mint tokens.</p>
+	</div>
+
+	<script>
+		async function refresh() {
+			const me = await fetch("/api/me").then((r) => r.json()).catch(() => null);
+			const detail = document.getElementById("me-detail")!;
+			const enrolCard = document.getElementById("enrol-card")!;
+			if (!me || !me.user) {
+				detail.innerHTML = `<p class="muted">Not authenticated. Make sure Cloudflare Access is configured for this app.</p>`;
+				return;
+			}
+			detail.innerHTML = `
+				<table>
+					<tr><th>Email</th><td>${me.user.email}</td></tr>
+					<tr><th>Role</th><td>${me.user.role}</td></tr>
+					<tr><th>Subscriber</th><td>${me.subscriber ? `${me.subscriber.name} <span class="tag ${me.subscriber.status === "approved" ? "ok" : "warn"}">${me.subscriber.status}</span>` : "—"}</td></tr>
+				</table>`;
+			if (me.user.role === "subscriber_user" && !me.user.subscriber_id) {
+				enrolCard.hidden = false;
+			}
+		}
+
+		document.getElementById("enrol-btn")?.addEventListener("click", async () => {
+			const name = (document.getElementById("name") as HTMLInputElement).value.trim();
+			if (!name) return alert("Please provide a name.");
+			const res = await fetch("/api/enrol", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name }),
+			});
+			const body = await res.json();
+			alert(JSON.stringify(body, null, 2));
+			refresh();
+		});
+
+		refresh();
+	</script>
+</Base>

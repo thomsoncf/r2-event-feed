@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.astro/
+
+# Turbo
+.turbo/
+
+# Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Vite
+*.local
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Local secrets and notes
+NOTES.md
+SECRETS*

@@ -1,0 +1,14 @@
+{
+	"name": "@r2-event-feed/feed-portal-frontend",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "astro build",
+		"dev": "astro dev",
+		"check-types": "astro check"
+	},
+	"dependencies": {
+		"astro": "^5.5.0"
+	}
+}

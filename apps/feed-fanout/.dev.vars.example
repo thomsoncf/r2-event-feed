@@ -1,0 +1,5 @@
+# Must match the value set in apps/feed-portal/.dev.vars
+STREAM_JWT_SECRET=
+
+# Must match the value set in apps/feed-portal/.dev.vars
+WEBHOOK_SIGNING_SECRET=

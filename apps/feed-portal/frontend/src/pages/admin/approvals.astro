@@ -1,0 +1,46 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+<Base title="Approvals">
+	<div class="card">
+		<h2>Pending approvals</h2>
+		<table id="t"><thead><tr><th>Approval</th><th>Subscriber</th><th>Requested by</th><th>Submitted</th><th></th></tr></thead><tbody></tbody></table>
+	</div>
+
+	<div class="card">
+		<h2>Recent audit log</h2>
+		<table id="audit"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody></tbody></table>
+	</div>
+
+	<script>
+		async function refresh() {
+			const data = await fetch("/api/admin/approvals").then((r) => r.json()).catch(() => ({ approvals: [] }));
+			const tbody = document.querySelector("#t tbody")!;
+			tbody.innerHTML = (data.approvals ?? [])
+				.map(
+					(a: any) =>
+						`<tr><td>#${a.id}</td><td><code>${a.subscriber_id}</code></td><td>${a.requested_by}</td><td class="muted">${new Date(a.created_at * 1000).toISOString()}</td><td><button class="decide" data-id="${a.id}" data-d="approved">Approve</button> <button class="secondary decide" data-id="${a.id}" data-d="denied">Deny</button></td></tr>`,
+				)
+				.join("");
+			tbody.querySelectorAll<HTMLButtonElement>(".decide").forEach((b) => {
+				b.onclick = async () => {
+					await fetch(`/api/admin/approvals/${b.dataset.id}/decision`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ decision: b.dataset.d }),
+					});
+					refresh();
+				};
+			});
+
+			const audit = await fetch("/api/admin/audit?limit=50").then((r) => r.json()).catch(() => ({ audit: [] }));
+			document.querySelector("#audit tbody")!.innerHTML = (audit.audit ?? [])
+				.map(
+					(a: any) =>
+						`<tr><td class="muted">${new Date(a.created_at * 1000).toISOString()}</td><td>${a.actor}</td><td>${a.action}</td><td><code>${a.target}</code></td></tr>`,
+				)
+				.join("");
+		}
+		refresh();
+	</script>
+</Base>

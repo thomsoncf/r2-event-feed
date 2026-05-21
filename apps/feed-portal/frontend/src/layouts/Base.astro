@@ -1,0 +1,63 @@
+---
+interface Props {
+	title: string;
+}
+const { title } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>{title} · r2-event-feed</title>
+		<style>
+			* { box-sizing: border-box; }
+			body {
+				font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+				margin: 0; background: #fafafa; color: #1c1c1c;
+			}
+			header { background: #f48120; color: #fff; padding: 18px 24px; }
+			header h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+			nav { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 24px; }
+			nav a { margin-right: 16px; text-decoration: none; color: #1f2937; font-weight: 500; }
+			nav a:hover { color: #f48120; }
+			main { max-width: 900px; margin: 24px auto; padding: 0 24px; }
+			.card { background: #fff; padding: 20px 24px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 16px; }
+			h2 { margin-top: 0; font-size: 16px; color: #111827; }
+			button {
+				background: #f48120; color: #fff; border: 0; padding: 8px 16px;
+				border-radius: 6px; font-weight: 500; cursor: pointer;
+			}
+			button:hover { background: #d36c0d; }
+			button.secondary { background: #fff; color: #111827; border: 1px solid #d1d5db; }
+			input, select {
+				border: 1px solid #d1d5db; padding: 8px 10px; border-radius: 6px;
+				font: inherit; width: 100%; max-width: 480px;
+			}
+			label { display: block; font-weight: 500; margin: 12px 0 4px; }
+			pre { background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+			table { width: 100%; border-collapse: collapse; }
+			th, td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: 13px; }
+			th { background: #f9fafb; font-weight: 600; }
+			.muted { color: #6b7280; font-size: 12px; }
+			.tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+			.tag.ok { background: #d1fae5; color: #065f46; }
+			.tag.warn { background: #fef3c7; color: #92400e; }
+			.tag.bad { background: #fee2e2; color: #991b1b; }
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>r2-event-feed</h1>
+		</header>
+		<nav>
+			<a href="/">Home</a>
+			<a href="/tokens/">Tokens & Subscriptions</a>
+			<a href="/feed/">Live Feed</a>
+			<a href="/admin/approvals/">Admin: Approvals</a>
+		</nav>
+		<main>
+			<slot />
+		</main>
+	</body>
+</html>

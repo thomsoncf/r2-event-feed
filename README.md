@@ -1,0 +1,202 @@
+# r2-event-feed
+
+A self-service, multi-subscriber **pub/sub feed** built on top of [Cloudflare R2 event notifications](https://developers.cloudflare.com/r2/buckets/event-notifications/).
+
+Operators publish objects to a single R2 bucket. Subscribers receive every event over their preferred channel — **webhook**, **pull-queue**, or **SSE / WebSocket** — all delivered, retried and fanned out by Cloudflare Workers.
+
+This repo is intentionally generic and reusable. There's no operator-specific code, schema, or naming anywhere.
+
+> _This is free and unencumbered software released into the public domain. See [LICENSE](./LICENSE)._
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  classDef edge fill:#fef3c7,stroke:#a16207,color:#451a03
+  classDef worker fill:#dbeafe,stroke:#1e40af,color:#0c1e3a
+  classDef store fill:#dcfce7,stroke:#166534,color:#052e16
+  classDef ext fill:#fce7f3,stroke:#9d174d,color:#3a0d20
+  classDef ctl stroke-dasharray: 4 3
+
+  subgraph OP["Operator (publisher)"]
+    UPLOAD["Object upload<br/>(S3 / wrangler / app)"]:::ext
+  end
+
+  subgraph CF["Cloudflare network"]
+    direction LR
+    R2[("R2 bucket<br/>source")]:::store
+    EQ(["Event Queue<br/>r2-event-feed-events"]):::edge
+    FANOUT["feed-fanout (Worker)<br/>queue consumer + DO host"]:::worker
+    PORTAL["feed-portal (Worker)<br/>Hono + Astro UI"]:::worker
+    D1[("D1<br/>subscribers, subscriptions,<br/>tokens, audit_log")]:::store
+    BCAST["Broadcaster DOs<br/>4-shard pool<br/>(hibernatable WS + SSE)"]:::worker
+    PQ(["Per-subscriber<br/>pull queues"]):::edge
+    ACCESS{{"Cloudflare Access<br/>@cloudflare.com policy"}}:::edge
+  end
+
+  subgraph SUB["Subscribers"]
+    direction TB
+    WH["Webhook receiver<br/>(HMAC-signed POST)"]:::ext
+    PULL["HTTP pull client<br/>(Queues Pull API)"]:::ext
+    WS["Browser / server<br/>WS + SSE clients"]:::ext
+    OPUI["Operator / subscriber<br/>browser"]:::ext
+  end
+
+  UPLOAD -- "PUT / DELETE" --> R2
+  R2 -- "event notification" --> EQ
+  EQ -- "batch=25 / 2s" --> FANOUT
+
+  FANOUT -- "HMAC POST + retry + DLQ" --> WH
+  FANOUT -- "enqueue" --> PQ
+  PQ -- "Queues Pull API" --> PULL
+  FANOUT -- "stub.send(event)" --> BCAST
+  BCAST -- "WS push / SSE push" --> WS
+
+  OPUI -- "HTTPS" --> ACCESS
+  ACCESS -- "JWT" --> PORTAL
+  PORTAL <-- "read / write" --> D1
+  FANOUT -- "stream-key lookup" --> D1
+  PORTAL -. "control plane: mint R2 tokens,<br/>provision pull queues, revoke" .-> CF:::ctl
+```
+
+### What's in this repo
+
+| Path | Purpose |
+|---|---|
+| `apps/feed-portal/` | Self-service portal Worker. Hono API, Astro UI, D1 layer, Cloudflare API client. |
+| `apps/feed-fanout/` | Queue consumer Worker. Owns the broadcaster Durable Objects and the three delivery channels. |
+| `demo/` | Seed SQL + sample object uploader so you can exercise the whole pipeline locally and in production. |
+| `docs/architecture.md` | Deep dive: sharding, JWT design, D1-on-upgrade rationale, retry / DLQ semantics. |
+| `docs/deploy.md` | Step-by-step deployment from a fresh Cloudflare account. |
+
+### Delivery channels at a glance
+
+| Channel | Best for | Auth | Backpressure |
+|---|---|---|---|
+| **Webhook** | Server-side receivers that already accept HTTPS posts. | HMAC-SHA256 over `body + timestamp`. Replay window enforced. | Fanout worker retries on 5xx; permanent failures go to DLQ. |
+| **Pull queue** | Receivers that can't expose a public endpoint, or want to batch. | Queue-scoped pull token. | Native — subscriber pulls at their own rate. |
+| **SSE / WebSocket** | Browsers, low-latency dashboards. | Long-lived JWT ("Stream Key"), revocable in D1. | Hibernatable DO + per-shard fan-out. |
+
+### Subscriber model
+
+- A **Subscriber** is a tenant: a row in the `subscribers` D1 table, approved by an operator.
+- A subscriber can have multiple **Feed Subscriptions** (one per channel they care about).
+- All subscribers see **every** event — there is no per-subscriber prefix scoping in MVP.
+- All credentials are long-lived and **manually revocable**. Subscribers can rotate any time from the portal.
+
+### Broadcaster shard pool
+
+The fanout worker owns a fixed pool of **4 broadcaster Durable Objects** (named `broadcast-0` … `broadcast-3`).
+
+- On subscription creation, each SSE/WS subscription is assigned a sticky shard via `hash(subscriber_id) % 4` (FNV-1a).
+- The shard id is **persisted in D1** so reconnects always land on the same DO.
+- Fanout uses `Promise.all` over the 4 shards per event — no single-DO bottleneck.
+- Each DO uses [hibernatable WebSockets](https://developers.cloudflare.com/durable-objects/best-practices/websockets/) so idle connections cost nothing.
+
+See [`docs/architecture.md`](./docs/architecture.md) for capacity numbers and the rationale.
+
+---
+
+## Quickstart
+
+> Full instructions are in [`docs/deploy.md`](./docs/deploy.md). This is the short version.
+
+### Prerequisites
+
+- Node 22+ and pnpm 10+
+- A Cloudflare account with Workers Paid plan (Durable Objects + Queues require it)
+- A Cloudflare API token with `Account:R2:Edit`, `Account:Queues:Edit`, `Account:Workers:Edit`, `Account:D1:Edit`, `Account:Access:Edit`
+- `wrangler` is already a workspace devDependency — no separate install
+
+### 1. Install
+
+```bash
+pnpm install
+```
+
+### 2. Create Cloudflare resources
+
+```bash
+export CLOUDFLARE_API_TOKEN=...
+export CLOUDFLARE_ACCOUNT_ID=...
+
+# R2 bucket that publishers write to
+pnpm exec wrangler r2 bucket create r2-event-feed-source
+
+# Event queue (R2 notifications → fanout)
+pnpm exec wrangler queues create r2-event-feed-events
+
+# D1 metadata database
+pnpm exec wrangler d1 create r2-event-feed
+# → copy the returned database_id into apps/feed-portal/wrangler.jsonc
+# →                            and apps/feed-fanout/wrangler.jsonc
+
+# Apply migrations
+pnpm exec wrangler d1 migrations apply r2-event-feed --remote \
+  --config apps/feed-portal/wrangler.jsonc
+
+# Wire R2 → Queue notifications
+pnpm exec wrangler r2 bucket notification create r2-event-feed-source \
+  --queue r2-event-feed-events \
+  --event-types object-create,object-delete
+```
+
+### 3. Deploy
+
+```bash
+pnpm --filter @r2-event-feed/feed-fanout exec wrangler deploy
+pnpm --filter @r2-event-feed/feed-portal exec wrangler deploy
+```
+
+### 4. Protect the portal with Cloudflare Access
+
+Create a self-hosted Access app for the portal Worker's `*.workers.dev` URL and apply a policy requiring `emails_ending_in: cloudflare.com` (or whatever domain your subscribers use). See [`docs/deploy.md`](./docs/deploy.md) for the API calls.
+
+### 5. Try it
+
+Upload a sample object:
+
+```bash
+pnpm exec wrangler r2 object put r2-event-feed-source/hello.txt --file=./demo/hello.txt
+```
+
+Within a couple of seconds the event flows through the queue, hits the fanout worker, and is delivered to every subscribed webhook / pull-queue / WS client. Tail the logs:
+
+```bash
+pnpm --filter @r2-event-feed/feed-fanout exec wrangler tail
+```
+
+---
+
+## Development
+
+```bash
+pnpm dev              # turbo runs both workers + the Astro frontend
+pnpm lint             # biome check
+pnpm check-types      # tsc --noEmit per app
+pnpm test             # vitest
+```
+
+## Layout
+
+```
+r2-event-feed/
+├── apps/
+│   ├── feed-portal/         # Hono API + Astro frontend
+│   │   ├── src/             # Worker source
+│   │   ├── frontend/        # Astro pages
+│   │   └── migrations/      # D1 schema
+│   └── feed-fanout/         # Queue consumer + broadcaster DOs
+│       └── src/
+├── demo/                    # Seed data + sample uploader
+├── docs/
+│   ├── architecture.md
+│   └── deploy.md
+└── (root config)
+```
+
+## Contributing
+
+PRs welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md). The project is in the public domain (Unlicense); by contributing you agree your contributions are too.

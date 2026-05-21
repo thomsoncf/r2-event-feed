@@ -1,0 +1,39 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "r2-event-feed-fanout",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-05-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"workers_dev": true,
+	"observability": { "enabled": true },
+
+	"durable_objects": {
+		"bindings": [{ "name": "BROADCASTER", "class_name": "Broadcaster" }]
+	},
+
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Broadcaster"] }],
+
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "r2-event-feed",
+			"database_id": "<D1_DATABASE_ID>"
+		}
+	],
+
+	"queues": {
+		"consumers": [
+			{
+				"queue": "r2-event-feed-events",
+				"max_batch_size": 25,
+				"max_batch_timeout": 2,
+				"max_retries": 3,
+				"dead_letter_queue": "r2-event-feed-events-dlq"
+			}
+		]
+	},
+
+	"vars": {
+		"SHARD_COUNT": "4"
+	}
+}

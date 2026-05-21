@@ -6,15 +6,25 @@ End-to-end deployment from a fresh Cloudflare account. About 15 minutes includin
 
 - Cloudflare account with Workers Paid plan
 - `node >= 22`, `pnpm >= 10`
-- Cloudflare API token with these scopes:
+- Cloudflare API token with these scopes (create a **Custom Token** at
+  [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens)):
+
+  - `Account → Account Settings: Read`
   - `Account → Workers Scripts: Edit`
   - `Account → Workers R2 Storage: Edit`
-  - `Account → Workers KV Storage: Edit` (only if you enable KV-based caching)
+  - `Account → Workers KV Storage: Edit` _(only if you enable KV-based caching)_
   - `Account → Queues: Edit`
   - `Account → D1: Edit`
   - `Account → Access: Edit`
-  - `User → Memberships: Read`
-  - `User → User Details: Read`
+  - **`Account → Account API Tokens: Edit`** — required for the portal to
+    mint and revoke bucket-scoped R2 read tokens for subscribers at runtime
+    via `POST /accounts/{id}/tokens`. **Without this, "Mint R2 token" fails
+    with `Unauthorized to access requested resource`.**
+
+  All scopes must be at the **Account** level — scope each line to the single
+  Cloudflare account you're deploying into. None of the scopes need `User →`
+  permissions, so you can safely create an account-scoped token instead of a
+  user-scoped one.
 
 Set both:
 

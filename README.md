@@ -92,8 +92,27 @@ See [`docs/architecture.md`](./docs/architecture.md) for capacity numbers and th
 
 - Node 22+ and pnpm 10+
 - A Cloudflare account with Workers Paid plan (Durable Objects + Queues require it)
-- A Cloudflare API token with `Account:R2:Edit`, `Account:Queues:Edit`, `Account:Workers:Edit`, `Account:D1:Edit`, `Account:Access:Edit`
 - `wrangler` is already a workspace devDependency — no separate install
+- A Cloudflare API token with **all** of the scopes below. The most easily-missed
+  one is **`Account API Tokens: Edit`** — the portal calls
+  `POST /accounts/{id}/tokens` at runtime to mint bucket-scoped R2 read tokens
+  for subscribers. Without it you get `Unauthorized to access requested resource`
+  when a subscriber clicks **Mint R2 token**.
+
+  | Scope                            | Why it's needed                                                                         |
+  | -------------------------------- | --------------------------------------------------------------------------------------- |
+  | `Account: Account Settings: Read`| Resolve the account itself (`/accounts/{id}` and basic introspection).                  |
+  | `Account: Workers Scripts: Edit` | Deploy `feed-portal` and `feed-fanout`, upload secrets, run `wrangler deploy`.          |
+  | `Account: Workers R2 Storage: Edit` | Create the source bucket and wire its event notifications to the queue.              |
+  | `Account: Queues: Edit`          | Create the event queue + DLQ, and let the portal provision per-subscriber pull queues.  |
+  | `Account: D1: Edit`              | Create the metadata DB and apply migrations.                                            |
+  | `Account: Access: Edit`          | Create the Access self-hosted app + policy that protects the portal.                    |
+  | **`Account: Account API Tokens: Edit`** | **Mint and revoke bucket-scoped R2 read tokens on behalf of subscribers (runtime).** |
+
+  > Tip: in the Cloudflare dashboard, create a **Custom Token** under
+  > [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) and
+  > add each of the above as a separate permission line, scoped to the single
+  > account that hosts this deploy.
 
 ### 1. Install
 

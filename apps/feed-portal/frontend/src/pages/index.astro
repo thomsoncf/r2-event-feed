@@ -5,13 +5,14 @@ import Base from "../layouts/Base.astro";
 	<div class="card">
 		<h2>Welcome</h2>
 		<p>
-			This is the <strong>r2-event-feed</strong> self-service portal. Use it to enrol as a
-			subscriber, mint R2 read tokens, and create webhook / pull-queue / SSE subscriptions
-			against the operator's R2 bucket.
+			This is the <strong>r2-event-feed</strong> self-service portal. Use it to create a
+			Subscriber tenant, mint R2 read tokens, and create webhook / pull-queue / SSE
+			subscriptions against the operator's R2 bucket.
 		</p>
 		<p class="muted">
-			You should be signed in via Cloudflare Access. If you're an operator, you'll see the
-			admin tools. If you're a new subscriber, click <strong>Enrol</strong> below.
+			You should be signed in via Cloudflare Access. If you don't have a Subscriber
+			tenant yet, the <strong>Create a Subscriber tenant</strong> card below will let
+			you create one. Anyone who can sign in is auto-approved.
 		</p>
 	</div>
 
@@ -21,13 +22,17 @@ import Base from "../layouts/Base.astro";
 	</div>
 
 	<div class="card" id="enrol-card" hidden>
-		<h2>Enrol as a subscriber</h2>
-		<label for="name">Organisation name</label>
+		<h2>Create a Subscriber tenant</h2>
+		<p class="muted">
+			Subscribers are the tenants that receive R2 events. Create one for yourself
+			so you can mint R2 read tokens and create webhook / pull-queue / SSE
+			subscriptions against the source bucket.
+		</p>
+		<label for="name">Subscriber name</label>
 		<input id="name" placeholder="Acme Corp" />
 		<p>
-			<button id="enrol-btn">Submit for approval</button>
+			<button id="enrol-btn">Create Subscriber</button>
 		</p>
-		<p class="muted">An operator will review your request. Until then, you can't mint tokens.</p>
 	</div>
 
 	<script>
@@ -45,7 +50,9 @@ import Base from "../layouts/Base.astro";
 					<tr><th>Role</th><td>${me.user.role}</td></tr>
 					<tr><th>Subscriber</th><td>${me.subscriber ? `${me.subscriber.name} <span class="tag ${me.subscriber.status === "approved" ? "ok" : "warn"}">${me.subscriber.status}</span>` : "—"}</td></tr>
 				</table>`;
-			if (me.user.role === "subscriber_user" && !me.user.subscriber_id) {
+			// Anyone authenticated but not yet linked to a Subscriber can create one.
+			// Operators (operator_admin) can also do this — see /api/enrol on the backend.
+			if (!me.user.subscriber_id) {
 				enrolCard.hidden = false;
 			}
 		}

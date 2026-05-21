@@ -16,7 +16,7 @@ This repo is intentionally generic and reusable. There's no operator-specific co
   Operator                              Subscribers
   --------                              -----------
 
-  upload                                  Webhook receiver
+  upload                                Webhook receiver
     |                                          ^
     v                                          | HMAC POST
   +----+   event   +-------+   batch    +---------+
@@ -32,8 +32,8 @@ This repo is intentionally generic and reusable. There's no operator-specific co
                                    +--------+  +-------------+
                                        |             |
                                        v             v
-                                  Pull client    SSE / WS
-                                                  client
+                                   Pull client   Topic-Based Subscription
+                                                  SSE / WS Client
 
 
        Portal (control plane)

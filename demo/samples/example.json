@@ -2,5 +2,5 @@
 	"name": "example",
 	"purpose": "exercise the r2-event-feed pipeline",
 	"events": ["object-create", "object-delete"],
-	"channels": ["webhook", "pull_queue", "sse"]
+	"channels": ["webhook", "sse"]
 }

@@ -40,7 +40,7 @@ CREATE INDEX idx_approvals_status ON approvals(status);
 CREATE TABLE feed_subscriptions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   subscriber_id TEXT NOT NULL,
-  channel       TEXT NOT NULL CHECK (channel IN ('webhook', 'pull_queue', 'sse')),
+  channel       TEXT NOT NULL CHECK (channel IN ('webhook', 'sse')),
   target        TEXT NOT NULL,
   secret_hash   TEXT,
   shard_id      INTEGER,

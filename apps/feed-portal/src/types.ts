@@ -36,7 +36,7 @@ export interface Subscriber {
 export interface FeedSubscription {
 	id: number;
 	subscriber_id: string;
-	channel: "webhook" | "pull_queue" | "sse";
+	channel: "webhook" | "sse";
 	target: string;
 	secret_hash: string | null;
 	shard_id: number | null;

@@ -37,31 +37,12 @@ import Base from "../layouts/Base.astro";
 		</div>
 
 		<div class="card">
-			<h2>Pull-queue subscription</h2>
-			<p class="muted">Provisions a dedicated Cloudflare Queue for you. Receive messages via the Queues HTTP Pull API.</p>
-			<div class="actions" style="margin-top: 28px">
-				<button id="create-pq">Create pull queue</button>
-			</div>
-			<div id="pq-result" class="result"></div>
-		</div>
-
-		<div class="card">
 			<h2>Topic-based SSE / WebSocket</h2>
 			<p class="muted">Long-lived stream key (JWT). Connect to <code>/stream?key=…</code> on the fanout worker for SSE, or <code>/ws?key=…</code> for WebSocket.</p>
 			<div class="actions">
 				<button id="create-stream">Create stream key</button>
 			</div>
 			<div id="stream-result" class="result"></div>
-		</div>
-
-		<div class="card">
-			<h2>Channel reference</h2>
-			<p class="muted">Quick reminder of when to use each channel.</p>
-			<table class="kv">
-				<tr><th>Webhook</th><td>Server-side receivers, push-style.</td></tr>
-				<tr><th>Pull queue</th><td>Receivers that can't expose a public endpoint.</td></tr>
-				<tr><th>SSE / WS</th><td>Browsers, low-latency dashboards.</td></tr>
-			</table>
 		</div>
 	</div>
 
@@ -122,8 +103,8 @@ import Base from "../layouts/Base.astro";
 			sbody.innerHTML = subRows.length === 0
 				? emptyRow(5, "No subscriptions yet. Create one above.")
 				: subRows.map((s: any) => {
-					const cleanChannel = s.channel === "sse" ? "stream" : s.channel.replace("_", "-");
-					const label = s.channel === "sse" ? "SSE / WS" : s.channel === "pull_queue" ? "Pull queue" : "Webhook";
+					const cleanChannel = s.channel === "sse" ? "stream" : s.channel;
+					const label = s.channel === "sse" ? "SSE / WS" : "Webhook";
 					return `<tr>
 						<td>${s.id}</td>
 						<td>${label}</td>
@@ -165,15 +146,6 @@ import Base from "../layouts/Base.astro";
 				body: JSON.stringify({ url }),
 			}).then((r) => r.json());
 			show("webhook-result", res);
-			btn.disabled = false;
-			refresh();
-		};
-
-		document.getElementById("create-pq")!.onclick = async () => {
-			const btn = document.getElementById("create-pq") as HTMLButtonElement;
-			btn.disabled = true;
-			const res = await fetch("/api/subscriptions/pull-queue", { method: "POST" }).then((r) => r.json());
-			show("pq-result", res);
 			btn.disabled = false;
 			refresh();
 		};

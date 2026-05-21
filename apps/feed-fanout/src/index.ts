@@ -95,7 +95,7 @@ async function handleQueue(
 	).all<{
 		id: number;
 		subscriber_id: string;
-		channel: "webhook" | "pull_queue" | "sse";
+		channel: "webhook" | "sse";
 		target: string;
 		shard_id: number | null;
 	}>();
@@ -141,11 +141,6 @@ async function handleQueue(
 				continue;
 			}
 		}
-
-		// Pull-queue deliveries are intentionally omitted from the data plane
-		// fanout for v0 — see docs/architecture.md. The Queues HTTP Pull API
-		// is the canonical mechanism for that channel; we expose the queue
-		// name in the portal so subscribers can pull directly.
 
 		msg.ack();
 	}

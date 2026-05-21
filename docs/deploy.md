@@ -153,7 +153,7 @@ You should see a `processing batch of N` log line within ~2 seconds.
 Open the portal in a browser. Cloudflare Access prompts for email OTP. Once authenticated:
 
 1. Click **Enroll** to create a Subscriber record (operator approves it from `/admin/approvals`).
-2. From `/tokens`, mint an R2 read token (if the subscriber wants direct object reads) and create one or more subscriptions (webhook, pull queue, SSE).
+2. From `/tokens`, mint an R2 read token (if the subscriber wants direct object reads) and create one or more subscriptions (webhook or SSE / WebSocket).
 3. Each secret/key is shown **once**. Save it.
 
 ## Rolling back

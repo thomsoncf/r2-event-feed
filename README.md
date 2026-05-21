@@ -2,7 +2,7 @@
 
 A self-service, multi-subscriber **pub/sub feed** built on top of [Cloudflare R2 event notifications](https://developers.cloudflare.com/r2/buckets/event-notifications/).
 
-Operators publish objects to a single R2 bucket. Subscribers receive every event over their preferred channel — **webhook**, **pull-queue**, or **SSE / WebSocket** — all delivered, retried and fanned out by Cloudflare Workers.
+Operators publish objects to a single R2 bucket. Subscribers receive every event over their preferred channel — **webhook** (HMAC-signed POST) or **SSE / WebSocket** (topic-based stream) — all delivered, retried and fanned out by Cloudflare Workers.
 
 This repo is intentionally generic and reusable. There's no operator-specific code, schema, or naming anywhere.
 
@@ -23,17 +23,17 @@ This repo is intentionally generic and reusable. There's no operator-specific co
   | R2 | --------> | Queue | ---------> | Fanout  |
   +----+           +-------+            | Worker  |
                                         +---------+
-                                          |     |
-                                  enqueue |     | push
-                                          v     v
-                                   +--------+  +-------------+
-                                   |  Pull  |  | Broadcaster |
-                                   | queue  |  |  DOs (x4)   |
-                                   +--------+  +-------------+
-                                       |             |
-                                       v             v
-                                   Pull client   Topic-Based Subscription
-                                                  SSE / WS Client
+                                                |
+                                                | push
+                                                v
+                                          +-------------+
+                                          | Broadcaster |
+                                          |  DOs (x4)   |
+                                          +-------------+
+                                                |
+                                                v
+                                      Topic-Based Subscription
+                                           SSE / WS Client
 
 
        Portal (control plane)
@@ -43,7 +43,7 @@ This repo is intentionally generic and reusable. There's no operator-specific co
                   (@cloudflare.com)         |
                                             v
                                     Cloudflare API
-                                 (mint tokens, queues)
+                                       (mint tokens)
 ```
 
 ### What's in this repo
@@ -51,7 +51,7 @@ This repo is intentionally generic and reusable. There's no operator-specific co
 | Path | Purpose |
 |---|---|
 | `apps/feed-portal/` | Self-service portal Worker. Hono API, Astro UI, D1 layer, Cloudflare API client. |
-| `apps/feed-fanout/` | Queue consumer Worker. Owns the broadcaster Durable Objects and the three delivery channels. |
+| `apps/feed-fanout/` | Queue consumer Worker. Owns the broadcaster Durable Objects and the delivery channels. |
 | `demo/` | Seed SQL + sample object uploader so you can exercise the whole pipeline locally and in production. |
 | `docs/architecture.md` | Deep dive: sharding, JWT design, D1-on-upgrade rationale, retry / DLQ semantics. |
 | `docs/deploy.md` | Step-by-step deployment from a fresh Cloudflare account. |
@@ -61,7 +61,6 @@ This repo is intentionally generic and reusable. There's no operator-specific co
 | Channel | Best for | Auth | Backpressure |
 |---|---|---|---|
 | **Webhook** | Server-side receivers that already accept HTTPS posts. | HMAC-SHA256 over `body + timestamp`. Replay window enforced. | Fanout worker retries on 5xx; permanent failures go to DLQ. |
-| **Pull queue** | Receivers that can't expose a public endpoint, or want to batch. | Queue-scoped pull token. | Native — subscriber pulls at their own rate. |
 | **SSE / WebSocket** | Browsers, low-latency dashboards. | Long-lived JWT ("Stream Key"), revocable in D1. | Hibernatable DO + per-shard fan-out. |
 
 ### Subscriber model
@@ -104,7 +103,7 @@ See [`docs/architecture.md`](./docs/architecture.md) for capacity numbers and th
   | `Account: Account Settings: Read`| Resolve the account itself (`/accounts/{id}` and basic introspection).                  |
   | `Account: Workers Scripts: Edit` | Deploy `feed-portal` and `feed-fanout`, upload secrets, run `wrangler deploy`.          |
   | `Account: Workers R2 Storage: Edit` | Create the source bucket and wire its event notifications to the queue.              |
-  | `Account: Queues: Edit`          | Create the event queue + DLQ, and let the portal provision per-subscriber pull queues.  |
+  | `Account: Queues: Edit`          | Create the event queue + DLQ.                                                            |
   | `Account: D1: Edit`              | Create the metadata DB and apply migrations.                                            |
   | `Account: Access: Edit`          | Create the Access self-hosted app + policy that protects the portal.                    |
   | **`Account: Account API Tokens: Edit`** | **Mint and revoke bucket-scoped R2 read tokens on behalf of subscribers (runtime).** |
@@ -193,7 +192,7 @@ pnpm exec wrangler r2 object put r2-event-feed-source/hello.txt \
   --file=./demo/samples/hello.txt --remote
 ```
 
-Within a couple of seconds the event flows through the queue, hits the fanout worker, and is delivered to every subscribed webhook / pull-queue / WS client. Tail the logs:
+Within a couple of seconds the event flows through the queue, hits the fanout worker, and is delivered to every subscribed webhook / WS client. Tail the logs:
 
 ```bash
 pnpm --filter @r2-event-feed/feed-fanout exec wrangler tail

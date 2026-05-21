@@ -2,7 +2,7 @@
 	"name": "r2-event-feed",
 	"version": "0.1.0",
 	"private": true,
-	"description": "Self-service R2 → Queues → Workers fan-out demo with webhook, pull-queue and SSE/WebSocket delivery channels.",
+	"description": "Self-service R2 → Queues → Workers fan-out demo with webhook and SSE/WebSocket delivery channels.",
 	"license": "Unlicense",
 	"scripts": {
 		"build": "turbo run build",

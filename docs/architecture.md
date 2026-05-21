@@ -5,7 +5,7 @@ A more detailed companion to the [top-level README](../README.md). Numbers below
 ## Goals
 
 1. **Self-service.** Subscribers enroll themselves and receive a working delivery configuration without operator hand-holding.
-2. **One pipeline, three transports.** Operators publish once; subscribers choose webhook, pull queue, or push stream.
+2. **One pipeline, two transports.** Operators publish once; subscribers choose webhook (HMAC-signed POST) or SSE / WebSocket (topic-based stream).
 3. **Cheap at idle, cheap at peak.** No always-on machines. Hibernatable WS, queue-based fan-out, DO sharding.
 4. **Public-domain reusable.** Nothing operator-specific.
 
@@ -14,11 +14,11 @@ A more detailed companion to the [top-level README](../README.md). Numbers below
 ```
 Publisher  ──PUT──►  R2 bucket  ──event──►  Queue  ──consume──►  feed-fanout
                                                                       │
-                          ┌───────────────────────────────────────────┼───────────────────────────┐
-                          │                                           │                           │
-                          ▼                                           ▼                           ▼
-                  Webhook delivery                            Pull-queue delivery         Broadcaster DOs (×4)
-                  (HMAC POST + retry + DLQ)                   (enqueue → subscriber pulls) (Hibernatable WS / SSE)
+                          ┌───────────────────────────────────────────┴───────────────────────────┐
+                          │                                                                       │
+                          ▼                                                                       ▼
+                  Webhook delivery                                                       Broadcaster DOs (×4)
+                  (HMAC POST + retry + DLQ)                                              (Hibernatable WS / SSE)
 ```
 
 ### Fanout batching
@@ -39,9 +39,8 @@ For each message in a batch:
 1. Look up active subscriptions in D1 (cached in-Worker per batch).
 2. Group by channel.
 3. Per channel:
-   - **Webhook:** sign body with HMAC-SHA256, POST with `X-Feed-Signature`, `X-Feed-Timestamp`, `X-Feed-Event-Id`. Retry 5xx via Cloudflare Queues backoff.
-   - **Pull queue:** `env.PER_SUB_QUEUE.send(payload)` to the subscriber's dedicated queue.
-   - **Broadcaster:** group subscriptions by their persisted `shard_id`, then `Promise.all` over each distinct shard's `stub.broadcast(payload)`.
+   - **Broadcaster (SSE / WS, runs first):** group subscriptions by their persisted `shard_id`, then `Promise.all` over each distinct shard's `stub.broadcast(payload)`. Broadcast is fire-and-forget; failures here do not block webhook delivery or trigger a retry.
+   - **Webhook:** sign body with HMAC-SHA256, POST with `X-Feed-Signature`, `X-Feed-Timestamp`, `X-Feed-Event-Id`. Retry 5xx / 429 via Cloudflare Queues backoff. A retry will re-broadcast the event — clients dedupe by `event.id`.
 
 ## Sharding
 
@@ -73,8 +72,8 @@ The portal Worker is a Hono app behind Cloudflare Access. It:
 - Renders the Astro UI (`/`, `/tokens`, `/feed`, `/admin/approvals`)
 - Owns all writes to D1
 - Calls the Cloudflare API to mint / revoke R2 tokens
-- Calls the Cloudflare API to create per-subscriber pull queues on demand
 - Mints "Stream Keys" — JWTs used by SSE/WS clients
+- Writes to the source R2 bucket via its `SOURCE_BUCKET` binding (used by `/api/demo/trigger`)
 
 The portal never sees real-time events. The fanout Worker never sees a logged-in user. The only thing they share is D1.
 
@@ -121,12 +120,11 @@ We chose D1-on-upgrade over a KV bloom filter or in-memory cache because:
 
 | Failure | Behaviour |
 |---|---|
-| Subscriber webhook 5xx | Queue retries with backoff; after `max_retries` → DLQ. |
+| Subscriber webhook 5xx / 429 | Queue retries with backoff; after `max_retries` → DLQ. Broadcast still happens first, so SSE/WS clients are not starved. |
 | Subscriber webhook 4xx | Treated as terminal — message dropped, subscriber notified via audit log. |
-| Subscriber pull queue full | Cloudflare Queues applies its own backpressure. |
 | Broadcaster DO crash | Hibernatable WS clients auto-reconnect; SSE clients reconnect on read error. |
 | D1 outage | Portal writes fail loudly; fanout's batched lookups fail → batch retried. |
-| Cloudflare API outage | Portal control-plane ops (mint token, create queue) fail loudly; data plane unaffected. |
+| Cloudflare API outage | Portal control-plane ops (mint token) fail loudly; data plane unaffected. |
 
 ## What's deliberately out of scope (MVP)
 

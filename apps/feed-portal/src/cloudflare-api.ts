@@ -1,8 +1,7 @@
 /**
  * Thin Cloudflare REST API client. Used by the portal control plane to:
  *   - Mint R2 Object-Read tokens scoped to a single bucket.
- *   - Provision per-subscriber pull queues on demand.
- *   - Revoke either of the above.
+ *   - Revoke the same.
  *
  * We intentionally do NOT proxy the response unchanged — we want to record only
  * the durable, non-secret bits in D1.
@@ -120,21 +119,4 @@ export async function revokeR2Token(args: {
 	await cfFetch(args.token, `/accounts/${args.accountId}/tokens/${args.tokenId}`, {
 		method: "DELETE",
 	});
-}
-
-export async function createSubscriberQueue(args: {
-	token: string;
-	accountId: string;
-	subscriberId: string;
-}): Promise<{ queue_id: string; queue_name: string }> {
-	const queue_name = `r2-event-feed-sub-${args.subscriberId}`.toLowerCase().slice(0, 64);
-	const res = await cfFetch<{ queue_id: string; queue_name: string }>(
-		args.token,
-		`/accounts/${args.accountId}/queues`,
-		{
-			method: "POST",
-			body: JSON.stringify({ queue_name }),
-		},
-	);
-	return res.result;
 }

@@ -2,40 +2,41 @@
 import Base from "../layouts/Base.astro";
 ---
 <Base title="Home">
-	<div class="card">
+	<div class="page-header">
 		<h2>Welcome</h2>
 		<p>
-			This is the <strong>r2-event-feed</strong> self-service portal. Use it to create a
-			Subscriber tenant, mint R2 read tokens, and create webhook / pull-queue / SSE
-			subscriptions against the operator's R2 bucket.
-		</p>
-		<p class="muted">
-			You should be signed in via Cloudflare Access. If you don't have a Subscriber
-			tenant yet, the <strong>Create a Subscriber tenant</strong> card below will let
-			you create one. Anyone who can sign in is auto-approved.
+			Self-service portal for the <strong>r2-event-feed</strong> pipeline. Create a
+			Subscriber tenant, mint R2 read tokens, and configure webhook / pull-queue /
+			SSE subscriptions against the operator's source bucket.
 		</p>
 	</div>
 
 	<div class="card" id="me-card">
 		<h2>Your account</h2>
-		<div id="me-detail">Loading…</div>
+		<p class="muted">Signed in via Cloudflare Access. Anyone allowed by the Access policy is auto-approved as a subscriber on first enrolment.</p>
+		<div id="me-detail" class="muted">Loading account…</div>
 	</div>
 
 	<div class="card" id="enrol-card" hidden>
 		<h2>Create a Subscriber tenant</h2>
 		<p class="muted">
-			Subscribers are the tenants that receive R2 events. Create one for yourself
-			so you can mint R2 read tokens and create webhook / pull-queue / SSE
-			subscriptions against the source bucket.
+			Subscribers are the tenants that receive R2 events. Create one for yourself so
+			you can mint tokens and configure subscriptions.
 		</p>
 		<label for="name">Subscriber name</label>
-		<input id="name" placeholder="Acme Corp" />
-		<p>
+		<input id="name" placeholder="Acme Corp" autocomplete="organization" />
+		<div class="actions">
 			<button id="enrol-btn">Create Subscriber</button>
-		</p>
+		</div>
+		<div id="enrol-result" class="result"></div>
 	</div>
 
 	<script>
+		function show(elId: string, value: unknown) {
+			const el = document.getElementById(elId);
+			if (el) el.innerHTML = `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+		}
+
 		async function refresh() {
 			const me = await fetch("/api/me").then((r) => r.json()).catch(() => null);
 			const detail = document.getElementById("me-detail")!;
@@ -44,17 +45,16 @@ import Base from "../layouts/Base.astro";
 				detail.innerHTML = `<p class="muted">Not authenticated. Make sure Cloudflare Access is configured for this app.</p>`;
 				return;
 			}
+			const sub = me.subscriber
+				? `<strong>${me.subscriber.name}</strong> <span class="tag ${me.subscriber.status === "approved" ? "ok" : "warn"}">${me.subscriber.status}</span>`
+				: `<span class="soft">— no subscriber tenant yet —</span>`;
 			detail.innerHTML = `
-				<table>
+				<table class="kv">
 					<tr><th>Email</th><td>${me.user.email}</td></tr>
-					<tr><th>Role</th><td>${me.user.role}</td></tr>
-					<tr><th>Subscriber</th><td>${me.subscriber ? `${me.subscriber.name} <span class="tag ${me.subscriber.status === "approved" ? "ok" : "warn"}">${me.subscriber.status}</span>` : "—"}</td></tr>
+					<tr><th>Role</th><td><span class="tag brand">${me.user.role}</span></td></tr>
+					<tr><th>Subscriber</th><td>${sub}</td></tr>
 				</table>`;
-			// Anyone authenticated but not yet linked to a Subscriber can create one.
-			// Operators (operator_admin) can also do this — see /api/enrol on the backend.
-			if (!me.user.subscriber_id) {
-				enrolCard.hidden = false;
-			}
+			if (!me.user.subscriber_id) enrolCard.hidden = false;
 		}
 
 		document.getElementById("enrol-btn")?.addEventListener("click", async () => {
@@ -64,9 +64,8 @@ import Base from "../layouts/Base.astro";
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name }),
-			});
-			const body = await res.json();
-			alert(JSON.stringify(body, null, 2));
+			}).then((r) => r.json());
+			show("enrol-result", res);
 			refresh();
 		});
 

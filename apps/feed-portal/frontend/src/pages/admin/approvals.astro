@@ -1,29 +1,77 @@
 ---
 import Base from "../../layouts/Base.astro";
 ---
-<Base title="Approvals">
+<Base title="Admin">
+	<div class="page-header">
+		<h2>Admin</h2>
+		<p>Approve subscriber enrolments and review the audit log. Auto-approval is on by default, so the pending list is usually empty.</p>
+	</div>
+
 	<div class="card">
 		<h2>Pending approvals</h2>
-		<table id="t"><thead><tr><th>Approval</th><th>Subscriber</th><th>Requested by</th><th>Submitted</th><th></th></tr></thead><tbody></tbody></table>
+		<div class="table-wrap">
+			<table id="t">
+				<thead>
+					<tr>
+						<th>Approval</th>
+						<th>Subscriber</th>
+						<th>Requested by</th>
+						<th>Submitted</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
 	</div>
 
 	<div class="card">
 		<h2>Recent audit log</h2>
-		<table id="audit"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody></tbody></table>
+		<p class="muted">Last 50 events, newest first.</p>
+		<div class="table-wrap">
+			<table id="audit">
+				<thead>
+					<tr>
+						<th>When</th>
+						<th>Actor</th>
+						<th>Action</th>
+						<th>Target</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
 	</div>
 
 	<script>
+		function ts(secs: number) {
+			return new Date(secs * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+		}
+
+		function emptyRow(cols: number, msg: string) {
+			return `<tr><td colspan="${cols}"><div class="empty">${msg}</div></td></tr>`;
+		}
+
 		async function refresh() {
 			const data = await fetch("/api/admin/approvals").then((r) => r.json()).catch(() => ({ approvals: [] }));
 			const tbody = document.querySelector("#t tbody")!;
-			tbody.innerHTML = (data.approvals ?? [])
-				.map(
-					(a: any) =>
-						`<tr><td>#${a.id}</td><td><code>${a.subscriber_id}</code></td><td>${a.requested_by}</td><td class="muted">${new Date(a.created_at * 1000).toISOString()}</td><td><button class="decide" data-id="${a.id}" data-d="approved">Approve</button> <button class="secondary decide" data-id="${a.id}" data-d="denied">Deny</button></td></tr>`,
-				)
-				.join("");
+			const rows = data.approvals ?? [];
+			tbody.innerHTML = rows.length === 0
+				? emptyRow(5, "No pending approvals.")
+				: rows.map((a: any) => `
+					<tr>
+						<td>#${a.id}</td>
+						<td><code>${a.subscriber_id}</code></td>
+						<td>${a.requested_by}</td>
+						<td class="muted">${ts(a.created_at)}</td>
+						<td style="text-align:right">
+							<button class="decide" data-id="${a.id}" data-d="approved">Approve</button>
+							<button class="secondary decide" data-id="${a.id}" data-d="denied">Deny</button>
+						</td>
+					</tr>`).join("");
 			tbody.querySelectorAll<HTMLButtonElement>(".decide").forEach((b) => {
 				b.onclick = async () => {
+					b.disabled = true;
 					await fetch(`/api/admin/approvals/${b.dataset.id}/decision`, {
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
@@ -34,12 +82,16 @@ import Base from "../../layouts/Base.astro";
 			});
 
 			const audit = await fetch("/api/admin/audit?limit=50").then((r) => r.json()).catch(() => ({ audit: [] }));
-			document.querySelector("#audit tbody")!.innerHTML = (audit.audit ?? [])
-				.map(
-					(a: any) =>
-						`<tr><td class="muted">${new Date(a.created_at * 1000).toISOString()}</td><td>${a.actor}</td><td>${a.action}</td><td><code>${a.target}</code></td></tr>`,
-				)
-				.join("");
+			const arows = audit.audit ?? [];
+			document.querySelector("#audit tbody")!.innerHTML = arows.length === 0
+				? emptyRow(4, "No audit entries yet.")
+				: arows.map((a: any) => `
+					<tr>
+						<td class="muted">${ts(a.created_at)}</td>
+						<td>${a.actor}</td>
+						<td><code>${a.action}</code></td>
+						<td><code>${a.target}</code></td>
+					</tr>`).join("");
 		}
 		refresh();
 	</script>

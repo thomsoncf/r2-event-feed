@@ -14,14 +14,20 @@ export async function deliverBroadcast(
 	shardIds: number[],
 	event: FeedEvent,
 ): Promise<void> {
-	if (shardIds.length === 0) return;
+	if (shardIds.length === 0) {
+		console.log(`broadcast: no SSE/WS shards for event ${event.id}, skipping`);
+		return;
+	}
 	const calls = shardIds.map(async (id) => {
 		const ns = env.BROADCASTER.idFromName(shardName(id));
 		const stub = env.BROADCASTER.get(ns);
 		try {
-			await stub.broadcast(event);
+			const res = await stub.broadcast(event);
+			console.log(
+				`broadcast: shard=${id} event=${event.id} key=${event.key} delivered=${res.delivered}`,
+			);
 		} catch (err) {
-			console.warn(`broadcast to shard ${id} failed`, err);
+			console.warn(`broadcast: shard=${id} threw`, err);
 		}
 	});
 	await Promise.all(calls);

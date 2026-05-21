@@ -156,14 +156,41 @@ pnpm --filter @r2-event-feed/feed-portal exec wrangler deploy
 
 ### 4. Protect the portal with Cloudflare Access
 
-Create a self-hosted Access app for the portal Worker's `*.workers.dev` URL and apply a policy requiring `emails_ending_in: cloudflare.com` (or whatever domain your subscribers use). See [`docs/deploy.md`](./docs/deploy.md) for the API calls.
+> **For production deployments, use a custom domain — not `*.workers.dev`.**
+>
+> The `workers.dev` subdomain is shared across the entire Cloudflare account
+> and (more importantly) across **all** Cloudflare accounts. That means:
+>
+> - Cloudflare Access cookies on `*.workers.dev` share an etld+1 with every
+>   other worker on that subdomain — session collisions are possible.
+> - You can't apply zone-level controls (WAF, rate-limit rules) to a
+>   `workers.dev` URL.
+> - Branding: users see `r2-event-feed-portal.<random>.workers.dev` instead
+>   of `portal.your-company.com`.
+>
+> For production, add a custom domain to the portal worker. In
+> `apps/feed-portal/wrangler.jsonc`:
+>
+> ```jsonc
+> "routes": [
+>   { "pattern": "portal.your-company.com", "custom_domain": true }
+> ]
+> ```
+>
+> Then point the Access app's `domain` at `portal.your-company.com`. The
+> `workers.dev` URL still works as a fallback during development.
+
+Create a self-hosted Access app for the portal Worker's URL and apply a policy
+requiring `emails_ending_in: cloudflare.com` (or whatever domain your
+subscribers use). See [`docs/deploy.md`](./docs/deploy.md) for the API calls.
 
 ### 5. Try it
 
 Upload a sample object:
 
 ```bash
-pnpm exec wrangler r2 object put r2-event-feed-source/hello.txt --file=./demo/hello.txt
+pnpm exec wrangler r2 object put r2-event-feed-source/hello.txt \
+  --file=./demo/samples/hello.txt --remote
 ```
 
 Within a couple of seconds the event flows through the queue, hits the fanout worker, and is delivered to every subscribed webhook / pull-queue / WS client. Tail the logs:

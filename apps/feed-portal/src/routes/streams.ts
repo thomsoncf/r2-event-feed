@@ -40,6 +40,11 @@ router.post("/api/subscriptions/stream", async (c) => {
 
 	await audit(c.env.DB, user.id, "subscription.stream.create", String(id), { kid, shard_id });
 
+	// Compose ready-to-use connect URLs so subscribers don't have to assemble them.
+	const fanoutBase = c.env.FANOUT_BASE_URL.replace(/\/$/, "");
+	const sse_url = `${fanoutBase}/stream?key=${encodeURIComponent(jwt)}`;
+	const ws_url = `${fanoutBase.replace(/^https:/, "wss:").replace(/^http:/, "ws:")}/ws?key=${encodeURIComponent(jwt)}`;
+
 	return c.json(
 		{
 			id,
@@ -47,6 +52,8 @@ router.post("/api/subscriptions/stream", async (c) => {
 			kid,
 			shard_id,
 			stream_key: jwt,
+			sse_url,
+			ws_url,
 			notice: "Save this stream key now. It will not be shown again.",
 		},
 		201,

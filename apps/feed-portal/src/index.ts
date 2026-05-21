@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { accessMiddleware } from "./middleware/access";
 import { auditMiddleware } from "./middleware/audit";
 import adminRoutes from "./routes/admin";
+import demoRoutes from "./routes/demo";
 import enrolRoutes from "./routes/enrol";
 import streamRoutes from "./routes/streams";
 import tokenRoutes from "./routes/tokens";
@@ -20,6 +21,7 @@ app.route("/", tokenRoutes);
 app.route("/", webhookRoutes);
 app.route("/", streamRoutes);
 app.route("/", adminRoutes);
+app.route("/", demoRoutes);
 
 app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
 app.onError((err, c) => {

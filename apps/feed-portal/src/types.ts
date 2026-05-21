@@ -1,12 +1,14 @@
 export interface Env {
 	DB: D1Database;
 	ASSETS: Fetcher;
+	SOURCE_BUCKET: R2Bucket;
 	CF_API_TOKEN: string;
 	CF_ACCOUNT_ID: string;
 	STREAM_JWT_SECRET: string;
 	WEBHOOK_SIGNING_SECRET: string;
 	OPERATOR_ALLOWED_DOMAIN: string;
 	SOURCE_BUCKET_NAME: string;
+	FANOUT_BASE_URL: string;
 }
 
 export interface AccessUser {

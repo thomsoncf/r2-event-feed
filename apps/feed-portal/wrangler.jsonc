@@ -23,8 +23,16 @@
 		}
 	],
 
+	"r2_buckets": [
+		{
+			"binding": "SOURCE_BUCKET",
+			"bucket_name": "r2-event-feed-source"
+		}
+	],
+
 	"vars": {
 		"OPERATOR_ALLOWED_DOMAIN": "cloudflare.com",
-		"SOURCE_BUCKET_NAME": "r2-event-feed-source"
+		"SOURCE_BUCKET_NAME": "r2-event-feed-source",
+		"FANOUT_BASE_URL": "https://r2-event-feed-fanout.demoflair.workers.dev"
 	}
 }

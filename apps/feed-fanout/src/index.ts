@@ -114,20 +114,33 @@ async function handleQueue(
 	for (const msg of batch.messages) {
 		const event = msgToEvent(msg.body);
 
-		// Webhook deliveries — fire in parallel, retry the whole batch on a 5xx.
-		const webhookResults = await Promise.allSettled(
-			webhookSubs.map((s) =>
-				deliverWebhook({ url: s.target, event, signingSecret: env.WEBHOOK_SIGNING_SECRET }),
-			),
-		);
-		const retryable = webhookResults.some((r) => r.status === "fulfilled" && r.value.retryable);
-		if (retryable) {
-			msg.retry();
-			continue;
+		// SSE / WS broadcast FIRST — fire-and-forget, never blocks the queue.
+		// Doing this before webhooks ensures broadcast clients are not starved
+		// when a webhook target flakes. Broadcast is idempotent on the client
+		// side: each event carries a unique id, so duplicates from a queue
+		// retry are safe to dedupe by the receiver.
+		try {
+			await deliverBroadcast(env, sseShardIds, event);
+		} catch (err) {
+			console.warn("broadcast threw, continuing", err);
 		}
 
-		// SSE / WS broadcast — fan out to each shard that has subscribers.
-		await deliverBroadcast(env, sseShardIds, event);
+		// Webhook deliveries — fire in parallel. A retryable failure (5xx/429)
+		// puts the message back on the queue with backoff. Broadcast clients
+		// will see the event again on retry; that's expected.
+		if (webhookSubs.length > 0) {
+			const webhookResults = await Promise.allSettled(
+				webhookSubs.map((s) =>
+					deliverWebhook({ url: s.target, event, signingSecret: env.WEBHOOK_SIGNING_SECRET }),
+				),
+			);
+			const retryable = webhookResults.some((r) => r.status === "fulfilled" && r.value.retryable);
+			if (retryable) {
+				console.log(`webhook retryable; queueing retry for event ${event.id}`);
+				msg.retry();
+				continue;
+			}
+		}
 
 		// Pull-queue deliveries are intentionally omitted from the data plane
 		// fanout for v0 — see docs/architecture.md. The Queues HTTP Pull API

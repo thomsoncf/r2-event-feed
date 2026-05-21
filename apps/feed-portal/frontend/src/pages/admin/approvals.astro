@@ -4,7 +4,7 @@ import Base from "../../layouts/Base.astro";
 <Base title="Admin">
 	<div class="page-header">
 		<h2>Admin</h2>
-		<p>Approve subscriber enrolments and review the audit log. Auto-approval is on by default, so the pending list is usually empty.</p>
+		<p>Review subscriber enrolments. Auto-approval is on by default, so this list is usually empty.</p>
 	</div>
 
 	<div class="card">
@@ -18,24 +18,6 @@ import Base from "../../layouts/Base.astro";
 						<th>Requested by</th>
 						<th>Submitted</th>
 						<th></th>
-					</tr>
-				</thead>
-				<tbody></tbody>
-			</table>
-		</div>
-	</div>
-
-	<div class="card">
-		<h2>Recent audit log</h2>
-		<p class="muted">Last 50 events, newest first.</p>
-		<div class="table-wrap">
-			<table id="audit">
-				<thead>
-					<tr>
-						<th>When</th>
-						<th>Actor</th>
-						<th>Action</th>
-						<th>Target</th>
 					</tr>
 				</thead>
 				<tbody></tbody>
@@ -80,18 +62,6 @@ import Base from "../../layouts/Base.astro";
 					refresh();
 				};
 			});
-
-			const audit = await fetch("/api/admin/audit?limit=50").then((r) => r.json()).catch(() => ({ audit: [] }));
-			const arows = audit.audit ?? [];
-			document.querySelector("#audit tbody")!.innerHTML = arows.length === 0
-				? emptyRow(4, "No audit entries yet.")
-				: arows.map((a: any) => `
-					<tr>
-						<td class="muted">${ts(a.created_at)}</td>
-						<td>${a.actor}</td>
-						<td><code>${a.action}</code></td>
-						<td><code>${a.target}</code></td>
-					</tr>`).join("");
 		}
 		refresh();
 	</script>

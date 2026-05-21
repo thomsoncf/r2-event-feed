@@ -182,7 +182,30 @@ import Base from "../layouts/Base.astro";
 			const btn = document.getElementById("create-stream") as HTMLButtonElement;
 			btn.disabled = true;
 			const res = await fetch("/api/subscriptions/stream", { method: "POST" }).then((r) => r.json());
-			show("stream-result", res);
+
+			// Stash the stream key in sessionStorage so /feed/ can use it
+			// without the user having to paste it. Tab-scoped: clearing the
+			// tab clears the keys.
+			if (res && res.stream_key && res.id) {
+				try {
+					const all = JSON.parse(sessionStorage.getItem("r2ef.streamKeys") ?? "{}");
+					all[String(res.id)] = {
+						id: res.id,
+						kid: res.kid,
+						sse_url: res.sse_url,
+						ws_url: res.ws_url,
+						stream_key: res.stream_key,
+					};
+					sessionStorage.setItem("r2ef.streamKeys", JSON.stringify(all));
+				} catch {}
+			}
+
+			const out = document.getElementById("stream-result")!;
+			out.innerHTML = `
+				<pre>${JSON.stringify(res, null, 2)}</pre>
+				<div class="actions">
+					<a class="open-feed-link" href="/feed/#sub=${res.id}"><button>Open in Live Feed →</button></a>
+				</div>`;
 			btn.disabled = false;
 			refresh();
 		};

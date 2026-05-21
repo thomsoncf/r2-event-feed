@@ -4,65 +4,190 @@ import Base from "../layouts/Base.astro";
 <Base title="Live Feed">
 	<div class="page-header">
 		<h2>Live event stream</h2>
-		<p>Paste your stream key (from the Tokens page) and the fanout worker URL to subscribe via Server-Sent Events.</p>
+		<p>Watch R2 events arrive in real time. Pick one of your active stream subscriptions, then trigger a test event to see it land.</p>
 	</div>
 
 	<div class="card">
-		<h2>Connection</h2>
-		<label for="fanout">Fanout worker base URL</label>
-		<input id="fanout" placeholder="https://r2-event-feed-fanout.your-subdomain.workers.dev" inputmode="url" />
-		<label for="key">Stream key (JWT)</label>
-		<input id="key" placeholder="eyJ…" />
+		<h2>Subscription</h2>
+		<p class="muted" id="picker-help">Loading your active stream subscriptions…</p>
+		<label for="sub-picker">Active stream subscription</label>
+		<select id="sub-picker"><option value="">— none —</option></select>
 		<div class="actions">
 			<button id="connect">Connect</button>
 			<button id="disconnect" class="secondary">Disconnect</button>
-			<button id="clear-log" class="secondary">Clear log</button>
+			<button id="trigger" class="secondary">Trigger a test event</button>
 		</div>
-		<p class="muted" id="status" style="margin-top: 14px">Disconnected.</p>
+		<p class="muted" id="status" style="margin-top: 14px;">
+			<span class="tag bad">disconnected</span>
+		</p>
+		<div id="trigger-result" class="result"></div>
 	</div>
 
 	<div class="card">
-		<h2>Events</h2>
-		<p class="muted">Newest first. Each line is one R2 event notification as delivered by the fanout worker.</p>
-		<pre id="log" style="max-height: 480px; overflow-y: auto; margin-top: 12px"></pre>
+		<h2>Events <span id="count" class="tag brand" style="margin-left: 8px">0</span></h2>
+		<p class="muted">Newest first. Click an event to expand the raw JSON.</p>
+		<div id="events" style="margin-top: 12px"></div>
+		<div id="empty" class="empty">Nothing yet. Connect, then click <strong>Trigger a test event</strong>.</div>
 	</div>
 
 	<script>
-		let es: EventSource | null = null;
-		const status = () => document.getElementById("status")!;
-		const log = () => document.getElementById("log")!;
+		type StreamMeta = { id: number; kid: string; sse_url: string; ws_url: string };
+		type Sub = { id: number; channel: string; target: string; shard_id: number | null; status: string };
 
-		function setStatus(text: string, tag: "ok" | "warn" | "bad" | null) {
-			const html = tag ? `<span class="tag ${tag}">${tag === "ok" ? "connected" : tag === "warn" ? "connecting" : "disconnected"}</span> ${text}` : text;
-			status().innerHTML = html;
+		let es: EventSource | null = null;
+		let ws: WebSocket | null = null;
+		let eventCount = 0;
+
+		const $status = () => document.getElementById("status")!;
+		const $events = () => document.getElementById("events")!;
+		const $empty = () => document.getElementById("empty")!;
+		const $count = () => document.getElementById("count")!;
+		const $picker = () => document.getElementById("sub-picker") as HTMLSelectElement;
+		const $help = () => document.getElementById("picker-help")!;
+
+		function setStatus(text: string, kind: "ok" | "warn" | "bad") {
+			$status().innerHTML = `<span class="tag ${kind}">${kind === "ok" ? "connected" : kind === "warn" ? "connecting" : "disconnected"}</span> ${text}`;
+		}
+
+		function loadKeys(): Record<string, StreamMeta> {
+			try {
+				return JSON.parse(sessionStorage.getItem("r2ef.streamKeys") ?? "{}");
+			} catch {
+				return {};
+			}
+		}
+
+		function renderEvent(raw: string) {
+			let parsed: any = null;
+			try { parsed = JSON.parse(raw); } catch {}
+			const time = new Date().toISOString().replace("T", " ").slice(0, 19);
+			const action = parsed?.action ?? "—";
+			const key = parsed?.key ?? "—";
+			const size = parsed?.size ?? "";
+			const id = eventCount;
+			eventCount++;
+			$count().textContent = String(eventCount);
+			$empty().style.display = "none";
+
+			const card = document.createElement("details");
+			card.className = "event-card";
+			card.innerHTML = `
+				<summary>
+					<span class="event-time">${time}</span>
+					<span class="tag brand">${action}</span>
+					<code class="event-key">${key}</code>
+					<span class="muted event-size">${size ? size + " B" : ""}</span>
+				</summary>
+				<pre>${parsed ? JSON.stringify(parsed, null, 2) : raw}</pre>
+			`;
+			const container = $events();
+			container.insertBefore(card, container.firstChild);
+		}
+
+		async function loadSubs() {
+			try {
+				const res = await fetch("/api/subscriptions").then((r) => r.json());
+				const subs: Sub[] = (res.subscriptions ?? []).filter((s: Sub) => s.channel === "sse" && s.status === "active");
+				const keys = loadKeys();
+				const picker = $picker();
+				picker.innerHTML = "";
+				if (subs.length === 0) {
+					picker.innerHTML = '<option value="">— no active stream subscriptions —</option>';
+					$help().innerHTML = `No active stream subscriptions. <a href="/tokens/">Create one</a>, then come back.`;
+					return;
+				}
+				for (const s of subs) {
+					const meta = keys[String(s.id)];
+					const hasKey = !!meta;
+					const opt = document.createElement("option");
+					opt.value = String(s.id);
+					opt.textContent = `#${s.id} · shard ${s.shard_id ?? "?"} ${hasKey ? "" : "(no key in this session)"}`;
+					opt.disabled = !hasKey;
+					picker.appendChild(opt);
+				}
+				$help().innerHTML = `${subs.length} active stream subscription${subs.length === 1 ? "" : "s"}. Keys are only kept for this browser tab — if a subscription says <em>no key in this session</em>, mint a fresh one from <a href="/tokens/">Tokens</a>.`;
+
+				// Auto-pick from URL hash if provided: /feed/#sub=ID
+				const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+				const fromHash = hash.get("sub");
+				if (fromHash && picker.querySelector(`option[value="${fromHash}"]`)) {
+					picker.value = fromHash;
+					if (loadKeys()[fromHash]) {
+						setTimeout(() => document.getElementById("connect")!.click(), 50);
+					}
+				}
+			} catch (err) {
+				$help().textContent = `Could not load subscriptions: ${(err as Error).message}`;
+			}
+		}
+
+		function disconnect() {
+			es?.close();
+			ws?.close();
+			es = null;
+			ws = null;
+			setStatus("Disconnected.", "bad");
 		}
 
 		document.getElementById("connect")!.onclick = () => {
-			const base = (document.getElementById("fanout") as HTMLInputElement).value.trim();
-			const key = (document.getElementById("key") as HTMLInputElement).value.trim();
-			if (!base || !key) return alert("Both fields required.");
-			es?.close();
-			const url = `${base.replace(/\/$/, "")}/stream?key=${encodeURIComponent(key)}`;
-			es = new EventSource(url);
-			setStatus(`Connecting to <code>${base}/stream</code>…`, "warn");
-			es.onopen = () => setStatus(`Connected to <code>${base}/stream</code>`, "ok");
-			es.onerror = () => setStatus("Error or disconnected.", "bad");
-			es.onmessage = (ev) => {
-				const time = new Date().toISOString();
-				log().textContent = `[${time}] ${ev.data}\n${log().textContent}`;
-			};
+			const id = $picker().value;
+			if (!id) return alert("Pick a subscription first.");
+			const meta = loadKeys()[id];
+			if (!meta) return alert("No stream key for this subscription in this browser tab.");
+			disconnect();
+			setStatus(`Connecting to <code>${new URL(meta.sse_url).pathname}</code>…`, "warn");
+			es = new EventSource(meta.sse_url);
+			es.onopen = () => setStatus(`Connected via SSE to shard ${meta.kid.slice(0, 12)}…`, "ok");
+			es.onerror = () => setStatus("Error or disconnected. Browser may auto-retry.", "bad");
+			es.onmessage = (ev) => renderEvent(ev.data);
 		};
 
-		document.getElementById("disconnect")!.onclick = () => {
-			es?.close();
-			es = null;
-			setStatus("Disconnected.", null);
+		document.getElementById("disconnect")!.onclick = disconnect;
+
+		document.getElementById("trigger")!.onclick = async () => {
+			const btn = document.getElementById("trigger") as HTMLButtonElement;
+			btn.disabled = true;
+			try {
+				const res = await fetch("/api/demo/trigger", { method: "POST" }).then((r) => r.json());
+				document.getElementById("trigger-result")!.innerHTML = `<p class="muted">Uploaded <code>${res.key}</code> (${res.size} B). Watching the queue…</p>`;
+			} catch (err) {
+				document.getElementById("trigger-result")!.innerHTML = `<p class="muted">Trigger failed: ${(err as Error).message}</p>`;
+			}
+			btn.disabled = false;
 		};
 
-		document.getElementById("clear-log")!.onclick = () => {
-			log().textContent = "";
-		};
-
-		setStatus("Disconnected.", null);
+		loadSubs();
 	</script>
+
+	<style>
+		.event-card {
+			background: var(--bg-elev);
+			border: 1px solid var(--border);
+			border-radius: var(--radius-sm);
+			margin-bottom: 8px;
+			padding: 0;
+			overflow: hidden;
+		}
+		.event-card summary {
+			padding: 10px 14px;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			font-size: 13px;
+			user-select: none;
+		}
+		.event-card summary::-webkit-details-marker { display: none; }
+		.event-card summary::before {
+			content: "▸";
+			color: var(--text-soft);
+			transition: transform 0.15s;
+		}
+		.event-card[open] summary::before { transform: rotate(90deg); }
+		.event-card summary:hover { background: var(--bg-soft); }
+		.event-time { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; }
+		.event-key { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.event-size { font-size: 11px; }
+		.event-card pre { margin: 0; border-radius: 0; }
+	</style>
 </Base>

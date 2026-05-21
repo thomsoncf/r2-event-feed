@@ -12,53 +12,38 @@ This repo is intentionally generic and reusable. There's no operator-specific co
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  classDef edge fill:#fef3c7,stroke:#a16207,color:#451a03
-  classDef worker fill:#dbeafe,stroke:#1e40af,color:#0c1e3a
-  classDef store fill:#dcfce7,stroke:#166534,color:#052e16
-  classDef ext fill:#fce7f3,stroke:#9d174d,color:#3a0d20
-  classDef ctl stroke-dasharray: 4 3
+```
+  Operator                              Subscribers
+  --------                              -----------
 
-  subgraph OP["Operator (publisher)"]
-    UPLOAD["Object upload<br/>(S3 / wrangler / app)"]:::ext
-  end
+  upload                                  Webhook receiver
+    |                                          ^
+    v                                          | HMAC POST
+  +----+   event   +-------+   batch    +---------+
+  | R2 | --------> | Queue | ---------> | Fanout  |
+  +----+           +-------+            | Worker  |
+                                        +---------+
+                                          |     |
+                                  enqueue |     | push
+                                          v     v
+                                   +--------+  +-------------+
+                                   |  Pull  |  | Broadcaster |
+                                   | queue  |  |  DOs (x4)   |
+                                   +--------+  +-------------+
+                                       |             |
+                                       v             v
+                                  Pull client    SSE / WS
+                                                  client
 
-  subgraph CF["Cloudflare network"]
-    direction LR
-    R2[("R2 bucket<br/>source")]:::store
-    EQ(["Event Queue<br/>r2-event-feed-events"]):::edge
-    FANOUT["feed-fanout (Worker)<br/>queue consumer + DO host"]:::worker
-    PORTAL["feed-portal (Worker)<br/>Hono + Astro UI"]:::worker
-    D1[("D1<br/>subscribers, subscriptions,<br/>tokens, audit_log")]:::store
-    BCAST["Broadcaster DOs<br/>4-shard pool<br/>(hibernatable WS + SSE)"]:::worker
-    PQ(["Per-subscriber<br/>pull queues"]):::edge
-    ACCESS{{"Cloudflare Access<br/>@cloudflare.com policy"}}:::edge
-  end
 
-  subgraph SUB["Subscribers"]
-    direction TB
-    WH["Webhook receiver<br/>(HMAC-signed POST)"]:::ext
-    PULL["HTTP pull client<br/>(Queues Pull API)"]:::ext
-    WS["Browser / server<br/>WS + SSE clients"]:::ext
-    OPUI["Operator / subscriber<br/>browser"]:::ext
-  end
+       Portal (control plane)
+       ----------------------
 
-  UPLOAD -- "PUT / DELETE" --> R2
-  R2 -- "event notification" --> EQ
-  EQ -- "batch=25 / 2s" --> FANOUT
-
-  FANOUT -- "HMAC POST + retry + DLQ" --> WH
-  FANOUT -- "enqueue" --> PQ
-  PQ -- "Queues Pull API" --> PULL
-  FANOUT -- "stub.send(event)" --> BCAST
-  BCAST -- "WS push / SSE push" --> WS
-
-  OPUI -- "HTTPS" --> ACCESS
-  ACCESS -- "JWT" --> PORTAL
-  PORTAL <-- "read / write" --> D1
-  FANOUT -- "stream-key lookup" --> D1
-  PORTAL -. "control plane: mint R2 tokens,<br/>provision pull queues, revoke" .-> CF:::ctl
+   browser --> Cloudflare Access --> Portal Worker --> D1
+                  (@cloudflare.com)         |
+                                            v
+                                    Cloudflare API
+                                 (mint tokens, queues)
 ```
 
 ### What's in this repo
